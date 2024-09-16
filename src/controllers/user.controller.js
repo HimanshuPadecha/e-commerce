@@ -551,6 +551,191 @@ const getOrders = asyncHandler(async(req,res)=>{
     .json(new ApiResponse(200,products[0].Products,"Orders fetched successfully"))
 })
 
+const getOrdersToDeliver = asyncHandler(async (req,res)=>{
+
+    const getOrdersToDeliver = await User.aggregate([
+        {
+            $match:{_id:new mongoose.Types.ObjectId(req.user._id)}
+        },
+        {
+            $lookup:{
+                from:"products",
+                localField:"itemsToDeliver",
+                foreignField:"_id",
+                as:"Products",
+                pipeline:[
+                    {
+                        $lookup:{
+                            from:"users",
+                            localField:"itemsToDeliver",
+                            foreignField:"_id",
+                            as:"DeliverTo"
+                        },
+                    },
+                    {
+                        $unwind:"$DeliverTo"
+                    },
+                    {
+                        $project:{
+                            DeliverTo:{
+                                email:1,
+                                username:1,
+                                address:1
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $project:{
+                Products:{
+                    title:1,
+                    description:1,
+                    price:1,
+                    stats:1,
+                    picture:1,
+                    DeliverTo:1
+                }
+            }
+        }
+    ]) 
+
+    if(!getOrdersToDeliver.length){
+        throw new ApiError(400,"No orders for you to deliver")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,getOrdersToDeliver,"The orders to your product has been fetched successfully"))
+})
+
+const getCart = asyncHandler(async(req,res)=>{
+
+    const cartItems = await User.aggregate([
+        {
+            $match:{_id:new mongoose.Types.ObjectId(req.user._id)}
+        },
+        {
+            $lookup:{
+                from:"products",
+                localField:"cart",
+                foreignField:"_id",
+                as:"Products"
+            }
+        },
+        {
+            $project:{
+                Products:{
+                    title:1,
+                    description:1,
+                    price:1,
+                    stats:1,
+                    picture:1
+                }
+            }
+        }
+    ])
+
+    if(!cartItems.length){
+        throw new ApiError(404,"Nothing in cart")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,cartItems,"cart items fetched successfully"))
+})
+
+const searchProduct = asyncHandler(async(req,res)=>{
+
+    const {query} = req.body
+
+    if(!query){
+        throw new ApiError(400,"properly send the details for the product")
+    }
+
+    const products = await Product.aggregate([
+        {
+            $match:{
+                $or:[
+                    {title:{$regex:query,$options:"i"}},
+                    {description:{$regex:query,$options:"i"}},
+                ]
+            }
+        },
+        {
+            $project:{
+                title:1,
+                description:1,
+                price:1,
+                stats:1,
+                picture:1
+            }
+        }
+    ])
+
+    if(!products.length){
+        throw new ApiError(404,"No products found")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,products,"Products fetched successfully"))
+})
+
+const getMyProducts = asyncHandler(async(req,res)=>{
+
+    const myProducts = await Product.aggregate([
+        {
+            $match:{owner:new mongoose.Types.ObjectId(req.user._id)}
+        },
+        {
+            $project:{
+                title:1,
+                description:1,
+                price:1,
+                stats:1,
+                picture:1
+            }
+        }
+    ])
+
+    if(!myProducts){
+        throw new ApiError(404,"You havn't added any products yet")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,myProducts,"Your products fetched successfully"))
+})
+
+const removeFromCart = asyncHandler(async(req,res)=>{
+    const productId = req.parms.productId
+
+    if(!productId || !isValidObjectId(productId)){
+        throw new ApiError(400,"provide proper product id")
+    }
+
+    const product = await Product.findById(productId)
+
+    if(!product){
+        throw new ApiError(404,"No product exist")
+    }
+
+    const removed = await User.findOneAndUpdate(req.user._id,{
+        $pull:{
+            cart:productId
+        }
+    },{new:true}).select("-password -refreshToken -otp -otpTimeStamp")
+
+    if(!removed){
+        throw new ApiError(500,"error while removing your product")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,removed,"product removed"))
+})
 
 export {
     registerUser
@@ -566,5 +751,10 @@ export {
     validateOtp,
     changeForgottedPassword,
     getCurrectUser,
-    getOrders
+    getOrders,
+    getOrdersToDeliver,
+    getCart,
+    searchProduct,
+    getMyProducts,
+    removeFromCart
 }
