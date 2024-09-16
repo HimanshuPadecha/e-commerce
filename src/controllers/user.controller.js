@@ -152,7 +152,7 @@ const newAccessTokenBasedOnRefresh = asyncHandler(async(req,res)=>{
 })
 
 const placeOrder = asyncHandler(async(req,res)=>{
-    const {productId} = req.params
+    const productId = req.params.productId
     const {quantity} = req.body
 
     if(!productId || !isValidObjectId(productId)){
@@ -232,9 +232,80 @@ const placeOrder = asyncHandler(async(req,res)=>{
     }
 })
 
+const cancleOrder = asyncHandler(async(req,res)=>{
+    const productId = req.params.productId
+
+    if(!productId || !isValidObjectId(productId)){
+        throw new ApiError(400,"provide proper productId")
+    }
+
+    const productExist = await Product.findById(productId)
+
+    if(!productExist){
+        throw new ApiError(404,"Product not found")
+    }
+
+    const order = await Order.findOne({orderBy:req.user._id,product:productId})
+
+    if(!order){
+        throw new ApiError(404,"You have never ordered this product")
+    }
+
+    const session = await mongoose.startSession()
+    session.startTransaction()
+
+    try {
+        const userUpdate = await User.findByIdAndUpdate(req.user._id,{
+            $pull:{
+                orderedItems:`${productId}`
+            },
+            $set:{
+                balance:req.user.balance + productExist.price
+            }
+        },{new:true,session})
+
+        if(!userUpdate){
+            throw new ApiError(500,"error while updating user's placed orders")
+        }
+
+        const ownerUpdate = await User.findByIdAndUpdate(order.productOwner,{
+            $pull:{
+                itemsToDeliver:{
+                    customer:`${req.user._id}`,
+                    product:`${productId}`
+                }
+            }
+        },{
+            new:true,session
+        })
+
+        if(!ownerUpdate){
+            throw new ApiError(500,"Error while updating owner of the product")
+        }
+
+        const orderDeleted = await await Order.findByIdAndDelete(order._id)
+
+        if(!orderDeleted){
+            throw new ApiError(500,"Error while deleting order")
+        }
+
+        await session.commitTransaction()
+
+        return res
+        .status(200)
+        .json(200,{message:"oreder is cancled, money credited !!"},"Your order is cancled successfully")
+    } catch (error) {
+        await session.abortTransaction()
+        throw new ApiError(500,`error in transaction : ${error.message}`)
+    }finally{
+        session.endSession()
+    }
+})
+
 export {registerUser
     ,loginUser,
     logoutUser,
     newAccessTokenBasedOnRefresh,
-    placeOrder
+    placeOrder,
+    cancleOrder
 }
