@@ -429,8 +429,8 @@ const configureForEmail = (email,otp) =>{
     const transporter = nodemailer.createTransport({
         service:"gmail",
         auth:{
-            user:"22030401118@darshan.ac.in",
-            pass:"himanshupadecha23467721"
+            user:`${process.env.EMAIL}`,
+            pass:`${process.env.EMAIL_PASS}`
         }
     })
 
