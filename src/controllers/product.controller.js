@@ -3,6 +3,10 @@ import {uploadOnCloudinary} from "../utils/cloudnary.js"
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Product } from "../models/product.model.js";
+import mongoose, { isValidObjectId } from "mongoose";
+import { Order } from "../models/orders.model.js";
+import { User } from "../models/user.model.js";
+import { Feedback } from "../models/feedback.model.js";
 
 const addProduct = asyncHandler(async(req,res)=>{
     //check for all the things
@@ -54,4 +58,165 @@ const addProduct = asyncHandler(async(req,res)=>{
     .json(new ApiResponse(200,product,"product created successfully !"))
 })
 
-export {addProduct}
+const removeProduct = asyncHandler(async(req,res)=>{
+    const productId = req.parms.productId
+
+    if(!productId || !isValidObjectId(productId)){
+        throw new ApiError(400,"Provide proper id")
+    }
+
+    const product = await Product.findById(productId)
+
+    if(!product){
+        throw new ApiError(404,"Product not found")
+    }
+
+    if(!product.owner.toString().equals(req.user._id.toString())){
+        throw new ApiError(408,"You are not the owner of this product ")
+    }
+
+    const order = User.findOne({orderedItems:productId})
+
+    if(order){
+        throw new ApiError(409,"someone have ordered this product unable to ")
+    }
+
+    const updatedAll = await User.updateMany({cart:productId},{
+        $pull:{
+            cart:productId
+        }
+    })
+
+    if(!updatedAll){
+        throw new ApiError(500,"error while removing product from user's carts")
+    }
+
+    const deleteFeedback = await Feedback.deleteMany({product:productId})
+
+    if(!deleteFeedback){
+        throw new ApiError(500,"Error while deleting feedback")
+    }
+
+    const deleteProduct = await Product.findByIdAndDelete(productId)
+
+    if(!deleteFeedback){
+        throw new ApiError(500,"error while deleting product ")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,deleteFeedback,"product deleted successfully"))
+})
+
+const getProductById = asyncHandler(async(req,res)=>{
+    const productId = req.parms.productId
+
+    if(!productId || !isValidObjectId(productId)){
+        throw new ApiError(400,"Provide proper id")
+    }
+
+    const product = await Product.findById(productId)
+
+    if(!product){
+        throw new ApiError(404,"Product not found")
+    }
+
+    const productFromDb = await Product.aggregate([
+        {
+            $match:{_id:new mongoose.Types.ObjectId(productId)}
+        },
+        {
+            $lookup:{
+                from:"feedbacks",
+                localField:"_id",
+                foreignField:"product",
+                as:"feedbacks",
+                pipeline:[
+                    {
+                        $lookup:{
+                            from:"users",
+                            localField:"feedbackBy",
+                            foreignField:"_id",
+                            as:"owner"
+                        }
+                    },
+                    {
+                        $unwind:"$owner"
+                    },
+                    {
+                        $project:{
+                            username:1,
+                            content:1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $project:{
+                picture:1,
+                title:1,
+                price:1,
+                description:1,
+                stats:1,
+                feedbacks:1
+            }
+        }
+    ])
+
+    if(!productFromDb){
+        throw new ApiError(500,"error while getting product")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,productFromDb,"Product fetched successfully"))
+})
+
+const modifyProduct = asyncHandler(async(req,res)=>{
+    const productId = req.params.productId
+    const {title,description,price,stats} = req.body
+
+    if(!productId || !isValidObjectId(productId)){
+        throw new ApiError(400,"Provide proper product id")
+    }
+
+    if(!title && !description && !price && !stats ){
+        throw new ApiError(400,"atleast provide one field")
+    }
+
+    const product = await Product.findById(productId)
+
+    if(!product){
+        throw new ApiError(404,"Product not found")
+    }
+
+    if(!product.owner.toString().equals(req.user._id.toString())){
+        throw new ApiError(408,"You are not the owner of this product unable to make any change")
+    }
+
+    const updated = await Product.findByIdAndUpdate(productId,{
+        $set:{
+            title: title || product.title,
+            description: description || product.description,
+            price: price || product.price,
+            stats:stats || product.stats        
+        }
+    },{
+        new:true
+    })
+
+    if(!updated){
+        throw new ApiError(500,"error while updating ")
+    }
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200,updated,"product updated"))
+})
+
+export {
+    addProduct,
+    getProductById,
+    modifyProduct
+}
