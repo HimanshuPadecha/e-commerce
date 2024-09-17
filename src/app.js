@@ -18,8 +18,10 @@ app.use(express.static("public"))
 
 import userRoute from "./routes/user.routes.js"
 import ProductRoute from "./routes/product.routes.js"
+import feedbackRoute from "./routes/feedback.routes.js"
 
 app.use("/api/v1/users",upload.none(),userRoute)
 app.use("/api/v1/products",ProductRoute)
+app.use("/api/v1/feedbacks",upload.none(),feedbackRoute)
 
 export {app}
