@@ -6,7 +6,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { Feedback } from "../models/feedback.model.js";
 
 const addFeedback = asyncHandler(async(req,res)=>{
-    const productId = req.parmas.productId
+    const productId = req.params.productId
     const {content} = req.body
 
     if(!productId || !isValidObjectId(productId)){
@@ -39,7 +39,7 @@ const addFeedback = asyncHandler(async(req,res)=>{
 })
 
 const deleteFeedback = asyncHandler(async(req,res)=>{
-    const feedbackId = req.parmas.feedbackId
+    const feedbackId = req.params.feedbackId
 
     if(!feedbackId || !isValidObjectId(feedbackId)){
         throw new ApiError(400,"Provide proper feedbackid")
@@ -63,7 +63,7 @@ const deleteFeedback = asyncHandler(async(req,res)=>{
 })
 
 const getMyProductsFeedbacks = asyncHandler(async(req,res)=>{
-    const productId = req.parmas.productId
+    const productId = req.params.productId
 
     if(!productId || !isValidObjectId(productId)){
         throw new ApiError(400,"Provide proper product id")
@@ -73,6 +73,10 @@ const getMyProductsFeedbacks = asyncHandler(async(req,res)=>{
 
     if(!product){
         throw new ApiError(400,"Product does not exist")
+    }
+
+    if(product.owner.toString() !== req.user._id.toString()){
+        throw new ApiError(400,"You are not the owner of this product. unable to get the feedback for procuct")
     }
 
     const feedbacks = await Feedback.aggregate([
@@ -92,8 +96,11 @@ const getMyProductsFeedbacks = asyncHandler(async(req,res)=>{
         },
         {
             $project:{
-                content:1,
-                owner:1
+                owner:{
+                    email:1,
+                    username:1,
+                    address:1
+                }
             }
         }
     ])

@@ -296,7 +296,7 @@ const cancleOrder = asyncHandler(async(req,res)=>{
 
         return res
         .status(200)
-        .json(200,{message:"oreder is cancled, money credited !!"},"Your order is cancled successfully")
+        .json(200,"order is cancled, money credited !!","Your order is cancled successfully")
     } catch (error) {
         await session.abortTransaction()
         throw new ApiError(500,`error in transaction : ${error.message}`)
@@ -318,11 +318,17 @@ const addToCart = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"Product not found")
     }
 
+    const productAlreadyInCart = await User.findOne({_id:req.user._id,cart:productId})
+
+    if(productAlreadyInCart){
+        throw new ApiError(406,"Product is already in the cart")
+    }
+
     const modified = await User.findOneAndUpdate(req.user._id,{
         $push:{
             cart:`${productId}`
         }
-    },{new:true})
+    },{new:true}).select("-password -refreshToken -otp -otpTimeStamp")
 
     if(!modified){
         throw new ApiError(500,"error while adding in your cart")
@@ -336,8 +342,8 @@ const addToCart = asyncHandler(async(req,res)=>{
 const editUser = asyncHandler(async(req,res)=>{
     const {email,username,address} = req.body
 
-    if(!email || !username || !address) {
-        throw new ApiError(400,"provide all the fields")
+    if(!email && !username && !address) {
+        throw new ApiError(400,"atleast provide one field")
     }
 
     const updated = await User.findByIdAndUpdate(req.user._id,{
@@ -346,7 +352,7 @@ const editUser = asyncHandler(async(req,res)=>{
             username: username || req.user.username,
             address:address || req.user.address
         }
-    })
+    },{new:true}).select("-password -otp -refreshToken")
 
     if(!updated){
         throw new ApiError(500,"error while updating ")
@@ -361,7 +367,7 @@ const changePassword = asyncHandler(async(req,res)=>{
     const {password} = req.body
     const {newPassword} =req.body
     
-    if(!password || newPassword){
+    if(!password || !newPassword){
         throw new ApiError(400,"Provide proper password")
     }
 
@@ -373,19 +379,12 @@ const changePassword = asyncHandler(async(req,res)=>{
         throw new ApiError(406,"Invalid old password")
     }
 
-    const modifiedUser = await User.findByIdAndUpdate(req.user._id,{
-        $set:{
-            password:newPassword
-        }
-    },{new:true}).select("-password -refreshToken")
-
-    if(!modifiedUser){
-        throw new ApiError(500,"error while changing password")
-    }
+    user.password = newPassword
+    user.save({validateBeforeSave:false})
 
     return res
     .status(200)
-    .json(new ApiResponse(200,modifiedUser,"password changed successfully !!"))
+    .json(new ApiResponse(200,user,"password changed successfully !!"))
 })
 
 
@@ -418,7 +417,13 @@ const forgotPassword = asyncHandler(async (req,res)=>{
 
     const {transporter,mailOptions} = configureForEmail(email,otp)
 
-    await transporter.sendMail(mailOptions)
+    try {
+        await transporter.sendMail(mailOptions)
+    } catch (error) {
+        console.log("error while sending mail: ", error);
+        
+        throw new ApiError(500,"error while sending email")
+    }
 
     return res
     .status(200)
@@ -435,7 +440,7 @@ const configureForEmail = (email,otp) =>{
     })
 
     const mailOptions = {
-        from:"22030401118@darshan.ac.in",
+        from:`${process.env.EMAIL}`,
         to:email,
         subject:"To change the password",
         text:`Your otp for changing password is ${otp}, This otp is valid for 10 minutes` 
@@ -447,7 +452,7 @@ const configureForEmail = (email,otp) =>{
 const validateOtp = asyncHandler(async(req,res)=>{
     const {otp,email} = req.body
 
-    if(!otp || (otp<1000000 || otp>999999)){
+    if(!otp || (otp<100000 || otp>999999)){
         throw new ApiError(400,"Invalid otp")
     }
 
@@ -461,7 +466,7 @@ const validateOtp = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"No user exist with the email you entered")
     }
 
-    if(otp !== user.otp){
+    if(otp !== user.otp.toString()){
         throw new ApiError(406,"Invalid otp")
     }
 
@@ -494,19 +499,12 @@ const changeForgottedPassword = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"No user exist with the email you entered")
     }
 
-    const modifiedUser = await User.findByIdAndUpdate(user._id,{
-        $set:{
-            password
-        }
-    },{new:true}).select("-password -refreshToken")
-
-    if(!modifiedUser){
-        throw new ApiError(500,"error while changing password")
-    }
+    user.password = password
+    user.save({validateBeforeSave:false})
 
     return res
     .status(200)
-    .json(new ApiResponse(200,modifiedUser,"password changed successfully !!"))
+    .json(new ApiResponse(200,user,"password changed successfully !!"))
 })
 
 const getCurrectUser = asyncHandler(async(req,res)=>{
@@ -601,10 +599,6 @@ const getOrdersToDeliver = asyncHandler(async (req,res)=>{
         }
     ]) 
 
-    if(!getOrdersToDeliver.length){
-        throw new ApiError(400,"No orders for you to deliver")
-    }
-
     return res
     .status(200)
     .json(new ApiResponse(200,getOrdersToDeliver,"The orders to your product has been fetched successfully"))
@@ -637,13 +631,9 @@ const getCart = asyncHandler(async(req,res)=>{
         }
     ])
 
-    if(!cartItems.length){
-        throw new ApiError(404,"Nothing in cart")
-    }
-
     return res
     .status(200)
-    .json(new ApiResponse(200,cartItems,"cart items fetched successfully"))
+    .json(new ApiResponse(200,cartItems[0],"cart items fetched successfully"))
 })
 
 const searchProduct = asyncHandler(async(req,res)=>{
@@ -710,7 +700,7 @@ const getMyProducts = asyncHandler(async(req,res)=>{
 })
 
 const removeFromCart = asyncHandler(async(req,res)=>{
-    const productId = req.parms.productId
+    const productId = req.params.productId
 
     if(!productId || !isValidObjectId(productId)){
         throw new ApiError(400,"provide proper product id")

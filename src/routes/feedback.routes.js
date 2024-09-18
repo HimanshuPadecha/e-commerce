@@ -7,7 +7,7 @@ const router = Router()
 router.use(verifyJwt)
 
 router.route("/add-feedback/:productId").post(addFeedback)
-router.route("/delete-feedback/:productId").post(deleteFeedback)
-router.route("/myProduct-feedbacks/:productId").post(getMyProductsFeedbacks)
+router.route("/delete-feedback/:feedbackId").post(deleteFeedback)
+router.route("/myProduct-feedbacks/:productId").get(getMyProductsFeedbacks)
 
 export default router

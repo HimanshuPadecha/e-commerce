@@ -4,7 +4,6 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Product } from "../models/product.model.js";
 import mongoose, { isValidObjectId } from "mongoose";
-import { Order } from "../models/orders.model.js";
 import { User } from "../models/user.model.js";
 import { Feedback } from "../models/feedback.model.js";
 
@@ -59,7 +58,7 @@ const addProduct = asyncHandler(async(req,res)=>{
 })
 
 const removeProduct = asyncHandler(async(req,res)=>{
-    const productId = req.parms.productId
+    const productId = req.params.productId
 
     if(!productId || !isValidObjectId(productId)){
         throw new ApiError(400,"Provide proper id")
@@ -71,14 +70,14 @@ const removeProduct = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"Product not found")
     }
 
-    if(!product.owner.toString().equals(req.user._id.toString())){
+    if(product.owner.toString() !== req.user._id.toString()){
         throw new ApiError(408,"You are not the owner of this product ")
     }
 
-    const order = User.findOne({orderedItems:productId})
+    const order = await User.findOne({orderedItems:productId})
 
     if(order){
-        throw new ApiError(409,"someone have ordered this product unable to ")
+        throw new ApiError(409,"someone have ordered this product unable to delete this product")
     }
 
     const updatedAll = await User.updateMany({cart:productId},{
@@ -88,28 +87,24 @@ const removeProduct = asyncHandler(async(req,res)=>{
     })
 
     if(!updatedAll){
-        throw new ApiError(500,"error while removing product from user's carts")
+        throw new ApiError(500,"error while removing product from users' carts")
     }
 
-    const deleteFeedback = await Feedback.deleteMany({product:productId})
-
-    if(!deleteFeedback){
-        throw new ApiError(500,"Error while deleting feedback")
-    }
+    await Feedback.deleteMany({product:productId})
 
     const deleteProduct = await Product.findByIdAndDelete(productId)
 
-    if(!deleteFeedback){
+    if(!deleteProduct){
         throw new ApiError(500,"error while deleting product ")
     }
 
     return res
     .status(200)
-    .json(new ApiResponse(200,deleteFeedback,"product deleted successfully"))
+    .json(new ApiResponse(200,deleteProduct,"product deleted successfully"))
 })
 
 const getProductById = asyncHandler(async(req,res)=>{
-    const productId = req.parms.productId
+    const productId = req.params.productId
 
     if(!productId || !isValidObjectId(productId)){
         throw new ApiError(400,"Provide proper id")
@@ -191,7 +186,7 @@ const modifyProduct = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"Product not found")
     }
 
-    if(!product.owner.toString().equals(req.user._id.toString())){
+    if(product.owner.toString() !== req.user._id.toString()){
         throw new ApiError(408,"You are not the owner of this product unable to make any change")
     }
 
@@ -218,5 +213,6 @@ const modifyProduct = asyncHandler(async(req,res)=>{
 export {
     addProduct,
     getProductById,
-    modifyProduct
+    modifyProduct,
+    removeProduct
 }

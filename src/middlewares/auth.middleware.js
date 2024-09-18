@@ -17,7 +17,7 @@ const verifyJwt = asyncHandler(async(req,res,next)=>{
 
     const decodedToken = await jwt.verify(accessToken,process.env.ACCESS_TOKEN_SECRET)
 
-    const user = await User.findById(decodedToken._id).select("-password -refreshToken")
+    const user = await User.findById(decodedToken._id).select("-password -refreshToken -otp")
 
     if(!user){
         throw new ApiError(409,"Invlid token")
