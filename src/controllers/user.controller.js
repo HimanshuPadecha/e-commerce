@@ -609,7 +609,8 @@ const getOrders = asyncHandler(async(req,res)=>{
                     title:1,
                     price:1,
                     description:1,
-                    stats:1
+                    stats:1,
+                    _id:1
                 }
             }
         }
@@ -627,51 +628,45 @@ const getOrders = asyncHandler(async(req,res)=>{
 const getOrdersToDeliver = asyncHandler(async (req,res)=>{
 
     const getOrdersToDeliver = await User.aggregate([
-        {
+       {
             $match:{_id:new mongoose.Types.ObjectId(req.user._id)}
-        },
-        {
+       },
+       {
+            $unwind:"$itemsToDeliver"
+       },
+       {
             $lookup:{
                 from:"products",
-                localField:"itemsToDeliver",
+                localField:"itemsToDeliver.product",
                 foreignField:"_id",
-                as:"Products",
-                pipeline:[
-                    {
-                        $lookup:{
-                            from:"users",
-                            localField:"itemsToDeliver",
-                            foreignField:"_id",
-                            as:"DeliverTo"
-                        },
-                    },
-                    {
-                        $unwind:"$DeliverTo"
-                    },
-                    {
-                        $project:{
-                            DeliverTo:{
-                                email:1,
-                                username:1,
-                                address:1
-                            }
-                        }
-                    }
-                ]
+                as:"Product"
             }
-        },
-        {
-            $project:{
-                Products:{
-                    title:1,
-                    description:1,
-                    price:1,
-                    stats:1,
-                    picture:1,
-                    DeliverTo:1
-                }
+       },
+       {
+            $lookup:{
+                from:"users",
+                localField:"itemsToDeliver.customer",
+                foreignField:"_id",
+                as:"Customer"
             }
+       },
+       {
+            $unwind:"$Product"
+       },
+       {
+            $unwind:"$Customer"
+       },
+       {
+        $project:{
+            "Customer.email":1,
+            "Customer.username":1,
+            "Customer.address":1,
+            "Product.title":1,
+            "Product.description":1,
+            "Product.picture":1,
+            "Product.price":1
         }
+       }
     ]) 
 
     return res

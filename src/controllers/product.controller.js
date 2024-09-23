@@ -140,8 +140,10 @@ const getProductById = asyncHandler(async(req,res)=>{
                     },
                     {
                         $project:{
-                            username:1,
-                            content:1
+                            owner:{
+                                username:1
+                            },content:1,
+                            _id:0
                         }
                     }
                 ]
@@ -154,7 +156,8 @@ const getProductById = asyncHandler(async(req,res)=>{
                 price:1,
                 description:1,
                 stats:1,
-                feedbacks:1
+                feedbacks:1,
+                
             }
         }
     ])
