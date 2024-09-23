@@ -165,7 +165,7 @@ const getProductById = asyncHandler(async(req,res)=>{
 
     return res
     .status(200)
-    .json(new ApiResponse(200,productFromDb,"Product fetched successfully"))
+    .json(new ApiResponse(200,productFromDb[0],"Product fetched successfully"))
 })
 
 const modifyProduct = asyncHandler(async(req,res)=>{
@@ -210,9 +210,28 @@ const modifyProduct = asyncHandler(async(req,res)=>{
     .json(new ApiResponse(200,updated,"product updated"))
 })
 
+const getProducts = asyncHandler(async(req,res)=>{
+
+
+    const {page = 1, limit = 6} = req.query
+
+    const products = await Product.find()
+        .limit(limit *1)
+        .skip((page - 1) * limit)
+
+    const count = await Product.countDocuments()
+
+    const totalPages = Math.ceil(count / limit)
+    
+    return res
+    .status(200)
+    .json(new ApiResponse(200,{products,totalPages},"Products fetched successfully"))
+})
+
 export {
     addProduct,
     getProductById,
     modifyProduct,
-    removeProduct
+    removeProduct,
+    getProducts
 }

@@ -61,6 +61,10 @@ const userSchema = new Schema({
     },
     otpTimeStamp:{
         type:Date
+    },
+    validation:{
+        type:String,
+        default:''
     }
 },{
     timestamps:true

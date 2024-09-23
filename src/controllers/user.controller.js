@@ -13,18 +13,24 @@ const registerUser = asyncHandler(async(req,res)=>{
 
     const {email,password,username,address,balance} = req.body
     console.log(req.body);
+    console.log("fields checked ");
+    
     
     if([email,password,username,address].some(item => item === undefined)){
         throw new ApiError(404,"provide all the fields")
     }
 
     const userFound = await User.findOne({
-        $or:[{email,username}]
+        $or:[{email},{username}]
     })
+    console.log("userFound checked");
+    
 
     if(userFound){
         throw new ApiError(408,"account already exist")
     }
+    console.log("if user exist send error done");
+    
 
    const user = await User.create({
     username,
@@ -33,12 +39,20 @@ const registerUser = asyncHandler(async(req,res)=>{
     balance,
     address
    })
+   console.log("new user created");
+   
 
    const theUser = await User.findById(user._id).select("-password -refreshToken")
+   console.log("new user extra call");
+   
 
    if(!theUser){
     throw new ApiError(500,"something went wrong when adding your database entry")
    }
+   console.log("check for server errors ");
+   console.log("ready to send response");
+   
+   
 
    return res
    .status(200)
@@ -394,14 +408,18 @@ const forgotPassword = asyncHandler(async (req,res)=>{
     if(!email){
         throw new ApiError(400,"Email is required to recover account")
     }
+    
 
     const user = await User.findOne({email})
+    
 
     if(!user){
         throw new ApiError(404,"No user exist with the email you entered")
     }
+    
 
     const otp = Math.floor(Math.random() * 1000000 )
+    
 
     const otpEntered = await User.findOneAndUpdate(user._id,{
         $set:{
@@ -410,21 +428,26 @@ const forgotPassword = asyncHandler(async (req,res)=>{
     },{
         new:true
     }).select("-password -refreshToken -otp -otpTimeStamp")
+    
 
     if(!otpEntered){
         throw new ApiError(500,"error while setting otp in database")
     }
+    
 
     const {transporter,mailOptions} = configureForEmail(email,otp)
+    
 
     try {
         await transporter.sendMail(mailOptions)
     } catch (error) {
-        console.log("error while sending mail: ", error);
-        
+        console.log("error while sending mail: ", error); 
         throw new ApiError(500,"error while sending email")
     }
 
+    user.validation = `${process.env.FIRST_CODE}`
+    await user.save({validateBeforeSave:false})
+    
     return res
     .status(200)
     .json(new ApiResponse(200,otpEntered,"The otp is sent to the email you entered !"))
@@ -452,29 +475,59 @@ const configureForEmail = (email,otp) =>{
 const validateOtp = asyncHandler(async(req,res)=>{
     const {otp,email} = req.body
 
+
+
     if(!otp || (otp<100000 || otp>999999)){
         throw new ApiError(400,"Invalid otp")
     }
+    
 
     if(!email){
         throw new ApiError(400,"Email is required to recover account")
     }
-
+    
     const user = await User.findOne({email})
 
+   
     if(!user){
         throw new ApiError(404,"No user exist with the email you entered")
     }
 
+    if(user.validation === `${process.env.SECOND_CODE}`){
+        throw new ApiError(400,"Your OTP has expired now! go through process again")
+    }
+
+    if(user.validation !== `${process.env.FIRST_CODE}`){
+        throw new ApiError(400,"We never sent you OTP")
+    }
+
+    
+
     if(otp !== user.otp.toString()){
         throw new ApiError(406,"Invalid otp")
     }
+    
 
     const isOtpInValidTime = moment().isBefore(moment(user.otpTimeStamp).add(10,"minutes"))
+    
 
     if(!isOtpInValidTime){
         throw new ApiError(406,"Your otp is expired")
     }
+    
+
+    const updated = await User.findByIdAndUpdate(user._id,{
+        $set:{
+            otp:null,
+            otpTimeStamp:null,
+            validation:`${process.env.SECOND_CODE}`
+        }
+    },{new:true})
+
+    if(!updated){
+        throw new ApiError(500,"error while setting up your secret code")
+    }
+    
 
     return res
     .status(200)
@@ -482,10 +535,10 @@ const validateOtp = asyncHandler(async(req,res)=>{
 
 })
 
-const changeForgottedPassword = asyncHandler(async(req,res)=>{
+const  changeForgottedPassword = asyncHandler(async(req,res)=>{
     const {password,email} = req.body
     
-    if(!password ){
+    if(!password){
         throw new ApiError(400,"Provide proper password")
     }
 
@@ -499,8 +552,30 @@ const changeForgottedPassword = asyncHandler(async(req,res)=>{
         throw new ApiError(404,"No user exist with the email you entered")
     }
 
+    if(user.validation !== `${process.env.SECOND_CODE}`){
+        throw new ApiError(400,"You have not verified your OTP")
+    }
+
+    const isChangingInValidTime = moment().isBefore(moment(user.otpTimeStamp).add(20,"minutes"))
+
+    if(!isChangingInValidTime){
+        throw new ApiError(400,"Process is expired")
+    }
+
+    const updated = await User.findByIdAndUpdate(user._id,{
+        $set:{
+            validation:""
+        }
+    },{new:true})
+
+    if(!updated){
+        throw new ApiError(500,"error while changing your password")
+    }
+
     user.password = password
     user.save({validateBeforeSave:false})
+
+    
 
     return res
     .status(200)
@@ -639,6 +714,8 @@ const getCart = asyncHandler(async(req,res)=>{
 const searchProduct = asyncHandler(async(req,res)=>{
 
     const {query} = req.body
+    console.log(query);
+    
 
     if(!query){
         throw new ApiError(400,"properly send the details for the product")
